@@ -1,0 +1,19 @@
+# ex: ft=sh
+
+_guilt_action() {
+	opts=$(guilt | tail -n+4 | head -n+7)
+	COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+}
+
+
+_guilt(){
+	local cur prev opts
+	COMPREPLY=()
+	cur="${COMP_WORDS[COMP_CWORD]}"
+	prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+	if [ "$COMP_CWORD" = 1 ]; then
+		_guilt_action
+	fi
+}
+complete -F _guilt guilt

@@ -5,7 +5,7 @@
 
 USAGE="[-v | -g | -e]"
 if [ -z "$GUILT_VERSION" ]; then
-	echo "Invoking `basename $0` directly is no longer supported." >&2
+	echo "Invoking $GUILT directly is no longer supported." >&2
 	exit 1
 fi
 
@@ -30,8 +30,8 @@ if [ ! -z "$edit" ]; then
 	git_editor "$series"
 elif [ ! -z "$gui" ]; then
 	[ -z "`get_top`" ] && die "No patches applied."
-	bottom=`git rev-parse refs/patches/$branch/$(head_n 1 $applied)`
-	top=`git rev-parse refs/patches/$branch/$(tail -n 1 $applied)`
+	bottom=`git rev-parse refs/patches/$branch/$(head_n 1 "$applied")`
+	top=`git rev-parse refs/patches/$branch/$(tail -n 1 "$applied")`
 	range="$bottom..$top"
 
 	# FIXME, this doesn't quite work - it's perfectly fine with

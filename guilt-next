@@ -5,7 +5,7 @@
 
 USAGE="[-p|--path]"
 if [ -z "$GUILT_VERSION" ]; then
-	echo "Invoking `basename $0` directly is no longer supported." >&2
+	echo "Invoking $GUILT directly is no longer supported." >&2
 	exit 1
 fi
 
@@ -21,7 +21,7 @@ while [ $# -ne 0 ]; do
 	shift
 done
 
-n=`wc -l < $applied`
+n=`wc -l < "$applied"`
 n=$(($n + 1))
 
 p=`get_series | awk "{ if (NR == $n) print \\$0}"`

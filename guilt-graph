@@ -5,7 +5,7 @@
 
 USAGE="[<patchname>]"
 if [ -z "$GUILT_VERSION" ]; then
-	echo "Invoking `basename $0` directly is no longer supported." >&2
+	echo "Invoking $GUILT directly is no longer supported." >&2
 	exit 1
 fi
 
@@ -42,9 +42,10 @@ disp "digraph G {"
 
 current="$top"
 
+safebranch=`echo "$branch"|sed 's%/%\\\\/%g'`
 while [ "$current" != "$base" ]; do
 	pname=`git show-ref | sed -n -e "
-/^$current refs\/patches\/$branch/ {
+/^$current refs\/patches\/$safebranch/ {
 	s,^$current refs/patches/$branch/,,
 	p
 	q

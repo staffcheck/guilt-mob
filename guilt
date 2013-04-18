@@ -17,7 +17,7 @@ case $1 in
 	exit
 	;;
 	-V|--ver|--versi|--versio|--version)
-	echo "Guilt version $GUILT_VERSION"
+	exec "guilt" "version"
 	exit
 	;;
 esac

@@ -5,13 +5,26 @@ INSTALL?=install
 OSFILES = $(filter-out $(wildcard *~),$(wildcard os.*))
 SCRIPTS = $(filter-out $(wildcard *~),$(wildcard guilt-*))
 
-.PHONY: all 
-all:
+VERSION:=$(shell { git describe 2> /dev/null | sed 's/^v//'; } || sed -n -e '/^GUILT_VERSION=/ { s/^GUILT_VERSION="/v/; s/"//; p; q; }' guilt)
+
+.PHONY: all
+all: guilt-version
 	@echo "Nothing to build, it is all bash :)"
 	@echo "Try make install"
 
+.PHONY: FORCE
+guilt-version: FORCE
+	@{	\
+		echo "#!/bin/sh";			\
+		echo "GUILT_VERSION=$(VERSION)";	\
+		echo "DO_NOT_CHECK_BRANCH_EXISTENCE=1";	\
+		echo "_main () {";			\
+		echo "	echo \"Guilt version \$$GUILT_VERSION\"";\
+		echo "}";				\
+	} >$@
+
 .PHONY: install
-install:
+install: guilt-version
 	$(INSTALL) -d $(DESTDIR)$(PREFIX)/bin/
 	$(INSTALL) -m 755 guilt $(DESTDIR)$(PREFIX)/bin/
 	$(INSTALL) -d $(DESTDIR)$(PREFIX)/lib/guilt/

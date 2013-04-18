@@ -829,6 +829,10 @@ guilt_hook()
 #
 . "$cmd"
 
+if [ "$1" = "-h" ]; then
+	usage
+fi
+
 #
 # Some constants
 #

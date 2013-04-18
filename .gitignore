@@ -7,3 +7,6 @@
 #
 *~
 *.swp
+
+# Generated script.
+/guilt-version

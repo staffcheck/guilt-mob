@@ -17,6 +17,8 @@ install:
 	$(INSTALL) -d $(DESTDIR)$(PREFIX)/lib/guilt/
 	$(INSTALL) -m 755 $(SCRIPTS) $(DESTDIR)$(PREFIX)/lib/guilt/
 	$(INSTALL) -m 644 $(OSFILES) $(DESTDIR)$(PREFIX)/lib/guilt/
+	$(INSTALL) -d $(DESTDIR)$(PREFIX)/etc/bash_completion.d/
+	$(INSTALL) -m 644 guilt.complete $(DESTDIR)$(PREFIX)/etc/bash_completion.d/
 
 .PHONY: uninstall
 uninstall:

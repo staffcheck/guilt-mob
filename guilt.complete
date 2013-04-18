@@ -1,19 +1,440 @@
-# ex: ft=sh
+#! /bin/bash
+# ex: ft=sh sts=4 sw=4 ts=4
 
-_guilt_action() {
-	opts=$(guilt | tail -n+4 | head -n+7)
-	COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
-}
+if type guilt &> /dev/null ; then
 
+if ! type _expand &> /dev/null ; then
+    # This function expands tildes in pathnames
+    #
+    _expand()
+    {
+	[ "$cur" != "${cur%\\}" ] && cur="$cur"'\'
 
-_guilt(){
-	local cur prev opts
-	COMPREPLY=()
-	cur="${COMP_WORDS[COMP_CWORD]}"
-	prev="${COMP_WORDS[COMP_CWORD-1]}"
-
-	if [ "$COMP_CWORD" = 1 ]; then
-		_guilt_action
+	# expand ~username type directory specifications
+	if [[ "$cur" == \~*/* ]]; then
+	    eval cur=$cur
+	elif [[ "$cur" == \~* ]]; then
+	    cur=${cur#\~}
+	    COMPREPLY=( $( compgen -P '~' -u $cur ) )
+	    return ${#COMPREPLY[@]}
 	fi
+    }
+fi
+
+if ! type _filedir &> /dev/null ; then
+    # This function performs file and directory completion. It's better than
+    # simply using 'compgen -f', because it honours spaces in filenames
+    #
+    _filedir()
+    {
+	local IFS=$'\t\n'
+
+	_expand || return 0
+
+	if [ "$1" = -d ]; then
+	    COMPREPLY=( ${COMPREPLY[@]} $( compgen -d -- $cur ) )
+	    return 0
+	fi
+	COMPREPLY=( ${COMPREPLY[@]} $( eval compgen -f -- \"$cur\" ) )
+    }
+fi
+
+if ! type _longopt &> /dev/null ; then
+    _longopt()
+    {
+	local cur opt
+
+	cur=${COMP_WORDS[COMP_CWORD]}
+
+	if [[ "$cur" == "--*=*" ]]; then
+	    opt=${cur%%=*}
+	    # cut backlash that gets inserted before '=' sign
+	    opt=${opt%\\*}
+	    cur=${cur#*=}
+	    _filedir
+	    COMPREPLY=( $( compgen -P "$opt=" -W '${COMPREPLY[@]}' -- $cur))
+	    return 0
+	fi
+
+	if [[ "$cur" == "-*" ]]; then
+	    COMPREPLY=( $( $1 --help 2>&1 | sed  -e '/--/!d' \
+			    -e 's/.*\(--[-A-Za-z0-9]\+=\?\).*/\1/' | \
+			   grep "^$cur" | sort -u ) )
+	elif [[ "$1" == "@(mk|rm)dir" ]]; then
+	    _filedir -d
+	else
+	    _filedir
+	fi
+    }
+fi
+ 
+
+# Complete on files, not on directories
+#
+# Directories are shown in completion, but with their trailing / so that
+#  user can go in them. It ought to be a more standard way to achieve this.
+#
+_guilt_comfile()
+{
+	COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -f -- "$cur" ) )
+	echo $( compgen -d -- "$cur" ) | while read d ; do
+		COMPREPLY=( ${COMPREPLY[@]:-} "$d/" )
+    done
 }
-complete -F _guilt guilt
+
+_guilt_completion()
+{
+    local cur prev cmds command_matches
+
+    COMPREPLY=()
+    cur=${COMP_WORDS[COMP_CWORD]}
+    prev=${COMP_WORDS[COMP_CWORD-1]}
+    pprev=${COMP_WORDS[COMP_CWORD-2]}
+
+	P=guilt
+    # quilt sub commands
+    #cmds='add annotate applied delete diff edit files fold fork graph \
+	#	grep header import mail new next patches pop previous push refresh \
+	#	remove rename revert series setup snapshot top unapplied'
+    #cmds=$(guilt | tail -n+4 | head -n+7)
+    cmds='\
+	add      files   import         prev     series \
+	applied  fold    import-commit  push     status \
+	branch   fork    init           rebase   top \
+	commit   graph   new            refresh  unapplied \
+	delete   guard   next           repair \
+	diff     header  patchbomb      rm \
+	export   help    pop            select \
+	'
+
+    # if no command were given, complete on commands
+    if [[ $COMP_CWORD -eq 1 ]] ; then
+	COMPREPLY=( $( compgen -W "$cmds -h" -- $cur ) )
+	return 0
+    fi
+
+#	if we're completing for 'quilt -h', then just 
+#	complete on any valid command
+#	if [ ${COMP_WORDS[1]} == -h ] ; then
+#		COMPREPLY=( $( compgen -W "$cmds" -- $cur ) )
+#	return 0
+#	fi
+
+    # Accept a partial command if it's unique, because quilt will accept it.
+    command_matches=( $(compgen -W "$cmds" -- ${COMP_WORDS[1]}) )
+    if [ ${#command_matches[@]} -ne 1 ] ; then
+	return 0
+    fi
+
+    # Complete depending on options
+    case ${command_matches[0]} in
+	add) # g,q
+#	   case $prev in
+#	     -P)
+#	        COMPREPLY=( $( compgen -W "$($P applied 2>/dev/null)" -- $cur ) )
+#		;;
+#	     *)
+	        _quilt_comfile
+			#add_opts="-P -h"
+	        COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -W $add_opts -- $cur ) )
+#	        ;;
+#	   esac
+	   ;;
+#	annotate) # q
+#	   case $prev in
+#	     -P)
+#	        COMPREPLY=( $( compgen -W "$($P applied 2>/dev/null)" -- $cur ) )
+#		;;
+#	     *)
+#	        _quilt_comfile
+#	        COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -W "-P -h" -- $cur ) )
+#	        ;;
+#	   esac
+#	   ;;
+	applied) # g,q
+		#applied_opts="-h" # q
+		COMPREPLY=( $( compgen -W "$applied_opts $($P applied 2>/dev/null)" -- $cur ) )
+		;;
+	branch) # guilt
+		# we complete the current branches for convienience in case the user
+		# wants to name the new branch similarly.
+		COMPREPLY=( $( compgen -W "$(git branch --list | sed 's/^\* //')" -- $cur ) )
+		;;
+	commit) # guilt
+		case $prev in
+			-n)
+				# return the highest possible number
+				COMPREPLY=( $( compgen -W "$($P series | wc -l)" -- $cur ) )
+				;;
+			-a|--all)
+				;;
+			*)
+				COMPREPLY=( $( compgen -W "-n -a --all" -- $cur ) )
+				;;
+		esac
+		;;
+	delete) # g,q
+		delete_opts="-f"
+		# delete_opts="-n -r -h --backup"
+		COMPREPLY=( $( compgen -W "$delete_opts $($P series)" -- $cur ) )
+		;;
+	diff) # g,q
+		# [-z] [<path>...]
+		_filedir
+		COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -W "-z" -- $cur ) )
+#	   case $prev in
+#	     -p)
+#	        COMPREPLY=( $( compgen -W "0 1" -- $cur ) )
+#		;;
+#	     -P|--combine)
+#			COMPREPLY=( $( compgen -W "$($P applied 2>/dev/null)" -- $cur ) )
+#		;;
+#	     --diff|-U|-C)
+#		;;
+#	     *)
+#	        _filedir
+#	        COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -W "-p -P -u -U -c -C -R -z -h --snapshot --diff --no-timestamps --no-index --combine --sort" -- $cur ) )
+#	        ;;
+#	   esac
+	   ;;
+#	edit) # quilt
+#	   _quilt_comfile
+#	   COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -W "-h" -- $cur ) )
+#	   ;;
+	files) # g,q
+		COMPREPLY=( $( compgen -W "-a -l -v" -- $cur ) )
+#	   case $prev in
+#	     --combine)
+#		COMPREPLY=( $( compgen -W "$(quilt applied 2>/dev/null)" -- $cur ) )
+#		;;
+#	     *)
+#		COMPREPLY=( $( compgen -W "-a -l -v -h --combine $(quilt applied 2>/dev/null)" -- $cur ) )
+#		;;
+#	   esac
+	   ;;
+	fold) # g,q
+		# in guilt, merge the named patch into the current patch.
+		COMPREPLY=( $( compgen -W "-k $($P series)" -- $cur ) )
+		# in quilt, integrate the patch from stdin into the topmost patch
+		# (checking that files in stdin are already in top)
+#	   case $prev in
+#	     -p)
+#	        COMPREPLY=( $( compgen -W "0 1" -- $cur ) )
+#		;;
+#	     *)
+#	        _quilt_comfile
+#	        COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -W "-p" -- $cur ) )
+#	        ;;
+#	   esac
+	   ;;
+	fork) # g,q (q did not have completion)
+		# display the autoincremented name.
+		#top=$( $P top )
+		#case $top in
+		#	*-[1-9]*)
+		#		;;
+		#	*)
+		#		top=$top-1
+		#		;;
+		#esac
+		COMPREPLY=( $( compgen -W "$($P series)" -- $cur ) )
+		;;
+	graph) # g,q
+		COMPREPLY=( $( compgen -W "$($P applied)" -- $cur ) )
+#		case $prev in
+#		  -T)
+#			COMPREPLY=( $( compgen -W "ps" -- $cur ) )
+#		;;
+#	     --edge-labels)
+#	        COMPREPLY=( $( compgen -W "files" -- $cur ) )
+#		;;
+#	     *)
+#		COMPREPLY=( $( compgen -W "-T -h --all --reduce --lines --edge-labels $(quilt applied 2>/dev/null)" -- $cur ) )
+#		;;
+#	   esac
+	   ;;
+#	grep) # quilt
+#	   _longopt grep
+#	   COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -W "-h" -- $cur ) )
+#	   ;;
+	guard) # guilt
+		#      guilt-guard [-l | --list | -n | --none | [<patchname>] [(+|-)<guard>...]]
+		case $prev in
+			-l|--list|-n|--none)
+				;;
+			*)
+				# FIXME list guard names after a patch name.
+				COMPREPLY=( $( compgen -W "$($P series)" -- $cur ) )
+				;;
+		esac
+		;;
+	header) # q,g
+		COMPREPLY=( $( compgen -W "-e -E $($P series)" -- $cur ) )
+		# COMPREPLY=( $( compgen -W "-a -e -h -r --backup --strip-diffstat --strip-trailing-whitespace $(quilt series)" -- $cur ) )
+		;;
+	help) # guilt
+		COMPREPLY=( $( compgen -W "$cmds" -- $cur ) )
+		;;
+	import-commit) # guilt
+		# TODO
+		#  guilt-import-commit [<hash> | <since>..[<until>] | ..<until>]
+		;;
+	import) # q,g
+		case $prev in
+			-P)
+				;;
+			*)
+				_quilt_comfile
+				COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -W "-P" -- $cur ) )
+				;;
+		esac
+#	   case $prev in
+#	     -p)
+#	        COMPREPLY=( $( compgen -W "0 1 2 3 4 5 6 7 8 9 10" -- $cur ) )
+#		;;
+#	     -P)
+#		;;
+#	     -d)
+#		COMPREPLY=( $( compgen -W "o a n" -- $cur ) )
+#		;;
+#	     *)
+#	        _quilt_comfile
+#	        COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -W "-p -P -f -d -h" -- $cur ) )
+#	        ;;
+#	   esac
+	   ;;
+	init) # guilt
+		;;
+#	mail) # quilt
+#	   COMPREPLY=( $( compgen -W "-m --prefix --mbox --send --sender --from --subject --to --cc --bcc" -- $cur ) )
+#	   ;;
+	new) # q,g (no quilt compreply supplied)
+		COMPREPLY=( $( compgen -W "-f -s -e -m $($P series)" -- $cur ) )
+		;;
+#	next|previous) # quilt
+	next|prev) # guilt
+		# XXX: appears to be a command with differing functionality.
+		COMPREPLY=( $( compgen -W "-p" -- $cur ) )
+#	   COMPREPLY=( $( compgen -W "$(quilt series)" -- $cur ) )
+	   ;;
+#	patches) # quilt
+#	   _quilt_comfile 
+#	   COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -W "-v -h" -- $cur ) )
+#	   ;;
+	patchbomb) # guilt (quilt mail?)
+#		guilt-patchbomb [-n] [-s] [--in-reply-to <msgid>] [--git] [--subject-prefix <prefix>] [<hash> | <since>..[<until>] | ..<until>]
+		# TODO: git hash junk.
+		COMPREPLY=( $( compgen -W "-n -s --in-reply-to --git --subject-prefix" -- $cur ) )
+		;;
+	pop) # g,q
+#	   COMPREPLY=( $( compgen -W "-a -f -R -q -v -h $(quilt applied 2>/dev/null)" -- $cur ) )
+		case $prev in
+			-n)
+				# return the highest possible number
+				COMPREPLY=( $( compgen -W "$($P series | wc -l)" -- $cur ) )
+				;;
+			*)
+				COMPREPLY=( $( compgen -W "-f -n -a --all $($P applied 2>/dev/null)" -- $cur ) )
+				;;
+		esac
+	   ;;
+	push) # q,g
+#	   COMPREPLY=( $( compgen -W "-a -f -q -v -h --leave-rejects --interactive --color $(quilt unapplied 2>/dev/null)" -- $cur ) )
+		case $prev in
+			-n)
+				# return the highest possible number
+				COMPREPLY=( $( compgen -W "$($P series | wc -l)" -- $cur ) )
+				;;
+			*)
+				COMPREPLY=( $( compgen -W "-f -n -a --all $($P unapplied 2>/dev/null)" -- $cur ) )
+				;;
+		esac
+	   ;;
+	rebase) # guilt
+		# TODO git stuff
+		# guilt-rebase <upstream>
+		COMPREPLY=( $( compgen -W "$(git branch -r --list | sed 's/->.*$//')" -- $cur ) )
+		;;
+	refresh) # g,q
+		COMPREPLY=( $( compgen -W "--git --diffstat" -- $cur ) )
+#	   case $prev in
+#	     -p)
+#	        COMPREPLY=( $( compgen -W "0 1" -- $cur ) )
+#		;;
+#	     -U|-C)
+#		;;
+#	     *)
+#	     	COMPREPLY=( $( compgen -W "-p -u -U -c -C -f -h $(quilt applied 2>/dev/null) --no-timestamps --no-index --diffstat --sort --backup --strip-trailing-whitespace" -- $cur ) )
+#		;;
+#	   esac
+	   ;;
+#	remove|revert) # quilt
+#	   case $prev in
+#	     -P)
+#	        COMPREPLY=( $( compgen -W "$(quilt applied 2>/dev/null)" -- $cur ) )
+#		;;
+#	     *)
+#	        _quilt_comfile 
+#	        COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -W "-P -h" -- $cur ) )
+#		;;
+#	   esac
+#	   ;;
+	repair) #guilt
+		COMPREPLY=( $( compgen -W "--full --status" -- $cur ) )
+		;;
+#	rename) #quilt
+#	   case $prev in
+#	     -P)
+#		COMPREPLY=( $( compgen -W "$(quilt series)" -- $cur ) )
+#		;;
+#	     *)
+#		COMPREPLY=( $( compgen -W "-P -h" -- $cur ) )
+#		;;
+#	   esac
+#	   ;;
+	rm) # guilt
+		_filedir
+		;;
+	select) # guilt
+		# guilt-select [ -n | --none | -s | --series | [--pop|--reapply] <guards...> ]
+		# TODO: guards
+		COMPREPLY=( $( compgen -W "-n --none -s --series --pop --reapply" -- $cur ) )
+		;;
+	series) # g,q
+		COMPREPLY=( $( compgen -W "-v -g -e" -- $cur ) )
+#	   COMPREPLY=( $( compgen -W "-v -h" -- $cur ) )
+	   ;;
+#	setup) # quilt
+#	   case $prev in
+#	     -d)
+#			_filedir -d
+#		;;
+#	     *)
+#	        _quilt_comfile
+#	        COMPREPLY=( ${COMPREPLY[@]:-} $( compgen -W "-d -v -h" -- $cur ) )
+#		;;
+#	   esac
+#	   ;;
+#	snapshot) # quilt
+#	   COMPREPLY=( $( compgen -W "-d -h" -- $cur ) )
+#	   ;;
+	status) # guilt
+		# guilt-status [-a|-A] [-c|-C] [-d|-D] [-m|-M] [-r|-R] [-t|-T] [-u|-U] [-x|-X] [-n]
+		COMPREPLY=( $( compgen -W "-a -A -c -C -d -D -m -M -r -R -t -T -u -U -x -X -n" -- $cur ) )
+		;;
+	unapplied) # g,q
+#	   COMPREPLY=( $( compgen -W "-h $($P series)" -- $cur ) )
+	   ;;
+	#fork|new|top|upgrade)
+#	   ;;
+    esac
+    return 0
+}
+
+[ ${BASH_VERSINFO[0]} '>' 2 -o \
+  ${BASH_VERSINFO[0]}  =  2 -a ${BASH_VERSINFO[1]} '>' 04 ] \
+&& _guilt_complete_opt="-o filenames"
+complete -F _guilt_completion $_guilt_complete_opt guilt
+unset -v _guilt_complete_opt
+
+fi

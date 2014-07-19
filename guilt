@@ -8,6 +8,13 @@ GUILT_NAME="Gloria"
 
 GUILT="$(basename "$0")"
 
+case $1 in
+    --trace)
+	shift
+	set -x
+	;;
+esac
+
 # If the first argument is one of the below, display the man page instead of
 # the rather silly and mostly useless usage string
 case $1 in
@@ -21,11 +28,6 @@ case $1 in
 	exit
 	;;
 esac
-
-# we change directories ourselves
-SUBDIRECTORY_OK=1
-
-. "$(git --exec-path)/git-sh-setup"
 
 #
 # Shell library
@@ -832,6 +834,11 @@ guilt_hook()
 if [ "$1" = "-h" ]; then
 	usage
 fi
+
+# we change directories ourselves
+SUBDIRECTORY_OK=1
+
+. "$(git --exec-path)/git-sh-setup"
 
 #
 # Some constants

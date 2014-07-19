@@ -39,16 +39,16 @@ uninstall:
 
 .PHONY: doc
 doc:
-	$(MAKE) -C Documentation all
+	+$(MAKE) -C Documentation all
 
 .PHONY: install-doc
 install-doc:
-	$(MAKE) -C Documentation install PREFIX=$(PREFIX) DESTDIR=$(DESTDIR) INSTALL=$(INSTALL)
+	+$(MAKE) -C Documentation install PREFIX=$(PREFIX) DESTDIR=$(DESTDIR) INSTALL=$(INSTALL)
 
 .PHONY: test
 test:
-	make -C regression all
+	+$(MAKE) -C regression all
 
 .PHONY: clean
-clean: 
-	$(MAKE) -C Documentation clean 
+clean:
+	+$(MAKE) -C Documentation clean
